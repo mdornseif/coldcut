@@ -12,17 +12,22 @@ several hounderd hosts at once - if your OS can handle this.
 
 For further enlightment on ESMTP see RFC 1869 (SMTP Service Extensions).
 
-python coldcut.py < List
+python -O coldcut.py < List
 
---drt@un.bewaff.net - http://c0re.jp/'''
+--drt@un.bewaff.net - http://c0re.jp/
 
-version = '$Id: coldcut.py,v 1.3 2001/12/05 21:13:50 drt Exp $'
+'''
+
+version = '$Id: coldcut.py,v 1.4 2001/12/05 22:49:30 drt Exp $'
+
+# TODO:
+# sort resp output
+# generate statistics
+# gnerate address lists
 
 # issue this commands
-surveycommands = ['EHLO survey.invalid.c0re.jp',
-                  'EHLO survey.c0re.jp',
-                  'HELO survey.c0re.jp',
-                  'HELP', 'QUIT']
+surveycommands = ['EHLO survey.c0re.jp',
+                  'QUIT']
 
 # max time we wait for a sucessfull data gathering process
 timeout = 66
@@ -30,7 +35,7 @@ timeout = 66
 # number of concurrent querys this might be limited by your OS
 # Win 95: 55, Linux 2.0: 245, Linux 2.2: 1000
 # FreeBSD, NT: 1000; can be tweaked for more.
-concurrency = 200
+concurrency = 222
 
 import sys
 import socket
@@ -62,7 +67,6 @@ def monitor():
         else:
             break
 
-
 def loop():
     '''loop over our sockets and monitor connections'''
 
@@ -72,7 +76,7 @@ def loop():
         poll_fun = asyncore.poll
 
     while asyncore.socket_map:
-        # monitor()
+        monitor()
         poll_fun(30.0, asyncore.socket_map)
         
                     
@@ -89,7 +93,7 @@ class smtpscan (asynchat.async_chat):
         self.timestamp = int(time.time())
         self.resp = {}
         self.awaiting = 'BANNER'
-        self.commands = surveycommands
+        self.commands = [x for x in surveycommands]
         self.done = 0
         
         try:
@@ -98,17 +102,14 @@ class smtpscan (asynchat.async_chat):
             self.handle_error()
             self.close()
 
-
     def handle_connect(self):
         '''we have successfull connected'''
         # ... and ignore this fact
         pass
                
-
     def handle_error(self):
         '''print out error information to stderr'''
         print >>sys.stderr, "ERROR:", self.host, sys.exc_info()[1]
-
     
     def collect_incoming_data (self, data):
         '''collect data which was recived on the socket'''
@@ -118,39 +119,31 @@ class smtpscan (asynchat.async_chat):
         '''we have read a whole line and decide what do do next'''
         data = self.buffer
         self.buffer = ''
-
         # update timestamp
         self.timestamp = int(time.time())
-
         # save response
         if __debug__:
-            print "<<", data
+            print "<<", self.host, data
         if not self.resp.has_key(self.awaiting):
             self.resp[self.awaiting] = data + '\n'
         else:
             self.resp[self.awaiting] += data + '\n'
-
         # check if the server awaits a new command
         if data[3] == ' ' and len(self.commands) > 0:
             cmd = self.commands.pop(0)
             self.awaiting = cmd.split(' ')[0]
             self.push('%s\r\n' % (cmd))
             if __debug__:
-                print ">>", cmd
-            
-
+                print ">>", self.host, cmd            
 
     def handle_close (self):
-        '''when the connection is closed use monitor() to start new connections'''
-        
+        '''when the connection is closed use monitor() to start new connections'''        
         self.close()
         if len(self.resp):
             print "(%r, %r)" % (self.host, self.resp)
         monitor()
                
-
 # "main"
-
 # use monitor() to fire up the number of connections we want
 monitor()
 # handle all the connection stuff
