@@ -16,21 +16,20 @@ python coldcut.py < List
 
 --drt http://un.bewaff.net/ out of the c0re'''
 
-version = '$Id: coldcut.py,v 1.1 2001/07/07 12:35:21 drt Exp $'
+version = '$Id: coldcut.py,v 1.2 2001/12/02 00:39:49 drt Exp $'
 
-# search for this ESMTP Feature
-searchextension = '8BITMIME'
-
-# the name we use for identifying ourselfs in EHLO
-myheloname = 'tlstest.koeln.ccc.de'
+# issue this commands
+surveycommands = ['EHLO survey.c0re.jp',
+                  'HELO survey.c0re.jp',
+                  'HELP', 'QUIT']
 
 # max time we wait for a sucessfull data gathering process
-timeout = 30
+timeout = 66
 
 # number of concurrent querys this might be limited by your OS
 # Win 95: 55, Linux 2.0: 245, Linux 2.2: 1000
 # FreeBSD, NT: 1000; can be tweaked for more.
-concurrency = 245
+concurrency = 200
 
 import sys
 import socket
@@ -40,8 +39,19 @@ import asyncore
 import asynchat
 
 def monitor():
-    '''open new connenctions until we reach concurrency'''
+    '''reap stale and open new connenctions until we reach concurrency'''
 
+    # from work_in_progress/reaper.py
+    # 'bring out your dead, <CLANG!>... bring out your dead!'
+    now = int(time.time())
+    for x in asyncore.socket_map.keys():
+        s =  asyncore.socket_map[x]
+        if hasattr(s, 'timestamp'):
+            if (now - s.timestamp) > timeout:
+                print >>sys.stdout, 'reaping connection to', s.host
+                s.close()
+
+    # create new connections
     while len(asyncore.socket_map) < concurrency:
         line = sys.stdin.readline()
         if line[-1:] == '\n':
@@ -51,15 +61,6 @@ def monitor():
         else:
             break
 
-    # work_in_progress/reaper.py
-    # 'bring out your dead, <CLANG!>... bring out your dead!'
-    now = int(time.time())
-    for x in asyncore.socket_map.keys():
-        s =  asyncore.socket_map[x]
-        if hasattr(s, 'timestamp'):
-            if (now - s.timestamp) > timeout:
-                print >>sys.stdout, 'reaping connection to', s.host
-                s.close()
 
 def loop():
     '''loop over our sockets and monitor connections'''
@@ -70,7 +71,7 @@ def loop():
         poll_fun = asyncore.poll
 
     while asyncore.socket_map:
-        monitor()
+        # monitor()
         poll_fun(30.0, asyncore.socket_map)
         
                     
@@ -85,6 +86,11 @@ class smtpscan (asynchat.async_chat):
         self.buffer = ''
         self.host = address
         self.timestamp = int(time.time())
+        self.resp = {}
+        self.awaiting = 'BANNER'
+        self.commands = surveycommands
+        self.done = 0
+        
         try:
             self.connect((address, 25))
         except:
@@ -94,46 +100,51 @@ class smtpscan (asynchat.async_chat):
 
     def handle_connect(self):
         '''we have successfull connected'''
-
         # ... and ignore this fact
         pass
                
 
     def handle_error(self):
         '''print out error information to stderr'''
-        
-        print >>sys.stderr, self.host, sys.exc_info()[1]
+        print >>sys.stderr, "ERROR:", self.host, sys.exc_info()[1]
 
     
     def collect_incoming_data (self, data):
         '''collect data which was recived on the socket'''
-        
         self.buffer = self.buffer + data
       
     def found_terminator (self):
-        '''we have read a whole line and devcide what do do next'''
-
+        '''we have read a whole line and decide what do do next'''
         data = self.buffer
         self.buffer = ''
-        # Check for various States in the Server
-        if data[:4] == '220 ':
-            # We are asked vor EHLO
-            self.push('EHLO %s\r\n' % (myheloname))
-        elif data[:3] == '250' and data[4:].upper() == searchextension:
-            # there is EHLO response withe th feature we are looking for. 
-            (host, port) = self.getpeername()
-            print host
-        elif data[4] == '-':
-            # continuation lines are ignored
-            pass
+
+        # update timestamp
+        self.timestamp = int(time.time())
+
+        # save response
+        if __debug__:
+            print "<<", data
+        if not self.resp.has_key(self.awaiting):
+            self.resp[self.awaiting] = data + '\n'
         else:
-            self.push('QUIT\r\n')
+            self.resp[self.awaiting] += data + '\n'
+
+        # check if the server awaits a new command
+        if data[3] == ' ' and len(self.commands) > 0:
+            cmd = self.commands.pop(0)
+            self.awaiting = cmd.split(' ')[0]
+            self.push('%s\r\n' % (cmd))
+            if __debug__:
+                print ">>", cmd
+            
 
 
     def handle_close (self):
         '''when the connection is closed use monitor() to start new connections'''
         
         self.close()
+        if len(self.resp):
+            print "(%r, %r)" % (self.host, self.resp)
         monitor()
                
 
