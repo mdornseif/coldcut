@@ -14,12 +14,13 @@ For further enlightment on ESMTP see RFC 1869 (SMTP Service Extensions).
 
 python coldcut.py < List
 
---drt http://un.bewaff.net/ out of the c0re'''
+--drt@un.bewaff.net - http://c0re.jp/'''
 
-version = '$Id: coldcut.py,v 1.2 2001/12/02 00:39:49 drt Exp $'
+version = '$Id: coldcut.py,v 1.3 2001/12/05 21:13:50 drt Exp $'
 
 # issue this commands
-surveycommands = ['EHLO survey.c0re.jp',
+surveycommands = ['EHLO survey.invalid.c0re.jp',
+                  'EHLO survey.c0re.jp',
                   'HELO survey.c0re.jp',
                   'HELP', 'QUIT']
 
