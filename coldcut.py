@@ -18,7 +18,7 @@ python -O coldcut.py < List
 
 '''
 
-version = '$Id: coldcut.py,v 1.4 2001/12/05 22:49:30 drt Exp $'
+version = '$Id: coldcut.py,v 1.5 2003/07/07 09:09:40 drt Exp $'
 
 # TODO:
 # sort resp output
@@ -26,7 +26,8 @@ version = '$Id: coldcut.py,v 1.4 2001/12/05 22:49:30 drt Exp $'
 # gnerate address lists
 
 # issue this commands
-surveycommands = ['EHLO survey.c0re.jp',
+surveycommands = ['EHLO md.hudora.de',
+                  'HELP',
                   'QUIT']
 
 # max time we wait for a sucessfull data gathering process
@@ -54,7 +55,7 @@ def monitor():
         s =  asyncore.socket_map[x]
         if hasattr(s, 'timestamp'):
             if (now - s.timestamp) > timeout:
-                print >>sys.stdout, 'reaping connection to', s.host
+                print >>sys.stderr, 'reaping connection to', s.host
                 s.close()
 
     # create new connections
